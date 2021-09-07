@@ -12,7 +12,7 @@ class Config:
         self.dataset = "ImageFolder"
         self.data_dir = "/data/face/parsing/dataset/CelebAMask-HQ_processed"
         self.image_size = 512
-        self.crop_size = (512, 512)
+        self.crop_size = (448, 448)
         self.do_val = True
 
         self.model_name = "BiSeNet"

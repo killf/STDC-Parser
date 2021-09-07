@@ -86,7 +86,7 @@ class Solver:
             self.log(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] "
                      f"[epoch={epoch}/{self.epochs}] "
                      f"step={step + 1}/{len(self.train_loader)} "
-                     f"lr={self.optimizer.get_lr():.4f} "
+                     f"lr={self.optimizer.get_lr():.6f} "
                      f"loss={loss:.4f}/{c.loss:.4f} "
                      f"bce_loss={boundary_bce_loss:.4f}/{c.boundary_bce_loss:.4f} "
                      f"dice_loss={boundary_dice_loss:.4f}/{c.boundary_dice_loss:.4f} "
