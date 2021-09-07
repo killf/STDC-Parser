@@ -15,6 +15,7 @@ class Compose:
 
 class ToTensor:
     def __call__(self, img, mask):
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = torch.from_numpy(img).type(torch.float32) / 255
         mask = torch.from_numpy(mask).type(torch.int64)
         return img, mask

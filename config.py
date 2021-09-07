@@ -17,6 +17,7 @@ class Config:
 
         self.model_name = "BiSeNet"
         self.model_args = Dict(
+            backbone="STDCNet813",
             pretrain_model="snapshot/STDCNet813M_73.91.tar",
             use_boundary_2=False,
             use_boundary_4=False,
@@ -24,22 +25,21 @@ class Config:
             use_boundary_16=False,
             use_conv_last=False
         )
-        self.backbone_name = "STDCNet813"
 
         self.loss_name = "Loss"
         self.loss_args = Dict(score_thresh=0.7, ignore_idx=255)
 
         self.optimizer_name = "Optimizer"
-        self.optimizer_args = Dict()
-
-        self.lr = 0.01
-        self.batch_size = 8
-        self.milestones = Dict(
+        self.optimizer_args = Dict(
             momentum=0.9,
             weight_decay=5e-4,
             warmup_start_lr=1e-5,
             power=0.9,
         )
+
+        self.lr = 0.01
+        self.batch_size = 8
+        self.milestones = Dict()
         self.epochs = 200
 
     def build(self, steps=None):

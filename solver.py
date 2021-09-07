@@ -26,7 +26,7 @@ class Solver:
 
         self.cfg = cfg.build(len(self.train_loader))
         self.num_classes = train_data.num_classes
-        self.model = MODELS[cfg.model_name](backbone=cfg.backbone_name, n_classes=train_data.num_classes, **cfg.model_args).to(self.device)
+        self.model = MODELS[cfg.model_name](n_classes=train_data.num_classes, **cfg.model_args).to(self.device)
 
         self.loss = LOSSES[cfg.loss_name](cfg, **cfg.loss_args).to(self.device)
         self.optimizer = Optimizers[cfg.optimizer_name](self.model, self.loss, **cfg.optimizer_args)
@@ -64,7 +64,7 @@ class Solver:
         t, c = Timer(), Counter()
         t.start()
         for step, (img, mask) in enumerate(self.train_loader):
-            img, mask = img.permute(0, 3, 1, 2).to(self.device), mask.unsqueeze_(1).to(self.device)
+            img, mask = img.permute(0, 3, 1, 2).to(self.device), mask.to(self.device)
             reader_time = t.elapsed_time()
 
             out, loss, boundary_bce_loss, boundary_dice_loss = self.train_step(img, mask)
@@ -85,7 +85,7 @@ class Solver:
             self.log(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] "
                      f"[epoch={epoch}/{self.epochs}] "
                      f"step={step + 1}/{len(self.train_loader)} "
-                     f"lr={self.optimizer.param_groups[0]['lr']:.4f} "
+                     f"lr={self.optimizer.get_lr():.4f} "
                      f"loss={loss:.4f}/{c.loss:.4f} "
                      f"boundary_bce_loss={boundary_bce_loss:.4f}/{c.boundary_bce_loss:.4f} "
                      f"boundary_dice_loss={boundary_dice_loss:.4f}/{c.boundary_dice_loss:.4f} "
@@ -156,8 +156,7 @@ class Solver:
         return c.miou
 
     def adjust_lr(self, value):
-        for params in self.optimizer.param_groups:
-            params['lr'] = value / 10 if params["name"] == "backbone" else value
+        self.optimizer.adjust_lr(value)
 
     def adjust_lr_manual(self):
         lr_file = os.path.join(self.cfg.output_dir, "lr.txt")

@@ -1,8 +1,7 @@
-import torch
 from torch import nn
 
-from OhemCELoss import OhemCELoss
-from detail_loss import DetailAggregateLoss
+from .OhemCELoss import OhemCELoss
+from .detail_loss import DetailAggregateLoss
 
 
 class Loss(nn.Module):

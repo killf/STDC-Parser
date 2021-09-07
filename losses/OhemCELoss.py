@@ -11,7 +11,6 @@ class OhemCELoss(nn.Module):
         self.criteria = nn.CrossEntropyLoss(ignore_index=ignore_lb, reduction='none')
 
     def forward(self, logits, labels):
-        N, C, H, W = logits.size()
         loss = self.criteria(logits, labels).view(-1)
         loss, _ = torch.sort(loss, descending=True)
         if loss[self.n_min] > self.thresh:
