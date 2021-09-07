@@ -80,15 +80,15 @@ class Solver:
             loss, boundary_bce_loss, boundary_dice_loss = float(loss), float(boundary_bce_loss), float(boundary_dice_loss)
             acc, miou = float(acc) * 100, float(miou) * 100
             batch_time = t.elapsed_time()
-            c.append(loss=loss, acc=acc, miou=miou, reader_time=reader_time, batch_time=batch_time)
+            c.append(loss=loss, boundary_bce_loss=boundary_bce_loss, boundary_dice_loss=boundary_dice_loss, acc=acc, miou=miou, reader_time=reader_time, batch_time=batch_time)
             eta = calculate_eta(len(self.train_loader) - step, c.batch_time)
             self.log(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] "
                      f"[epoch={epoch}/{self.epochs}] "
                      f"step={step + 1}/{len(self.train_loader)} "
                      f"lr={self.optimizer.get_lr():.4f} "
                      f"loss={loss:.4f}/{c.loss:.4f} "
-                     f"boundary_bce_loss={boundary_bce_loss:.4f}/{c.boundary_bce_loss:.4f} "
-                     f"boundary_dice_loss={boundary_dice_loss:.4f}/{c.boundary_dice_loss:.4f} "
+                     f"bce_loss={boundary_bce_loss:.4f}/{c.boundary_bce_loss:.4f} "
+                     f"dice_loss={boundary_dice_loss:.4f}/{c.boundary_dice_loss:.4f} "
                      f"acc={acc:.2f}/{c.acc:.2f} "
                      f"miou={miou:.2f}/{c.miou:.2f} "
                      f"batch_time={c.batch_time:.4f}+{c.reader_time:.4f} "
@@ -133,9 +133,9 @@ class Solver:
 
         c = Counter()
         for step, (img, mask) in enumerate(self.val_loader):
-            img, mask = img.permute(0, 3, 1, 2).to(self.device), mask.unsqueeze_(1).to(self.device)
+            img, mask = img.permute(0, 3, 1, 2).to(self.device), mask.to(self.device)
 
-            pred = self.model(img)
+            pred = self.model(img)[0]
 
             pred = torch.argmax(pred, 1)
             acc = torch.eq(pred, mask).float().mean()
