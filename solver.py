@@ -1,0 +1,208 @@
+from torch.utils.data import DataLoader
+from tensorboardX import SummaryWriter
+import datetime
+import os
+
+from utils import *
+from optimizers import Optimizers
+from datasets import DATASETS
+from models import MODELS
+from losses import LOSSES
+from config import Config
+
+
+class Solver:
+    def __init__(self, cfg: Config):
+        self.device = torch.device(cfg.device)
+        self.output_dir = cfg.output_dir
+
+        train_transform = Compose([ToTensor()])
+        train_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="train.txt", image_size=cfg.image_size, transform=train_transform)
+        self.train_loader = DataLoader(train_data, cfg.batch_size, True, num_workers=4)
+
+        val_transform = Compose([ToTensor()])
+        val_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="val.txt", image_size=cfg.image_size, transform=val_transform)
+        self.val_loader = DataLoader(val_data, cfg.batch_size, False)
+
+        self.cfg = cfg.build(len(self.train_loader))
+        self.num_classes = train_data.num_classes
+        self.model = MODELS[cfg.model_name](backbone=cfg.backbone_name, n_classes=train_data.num_classes, **cfg.model_args).to(self.device)
+
+        self.loss = LOSSES[cfg.loss_name](cfg, **cfg.loss_args).to(self.device)
+        self.optimizer = Optimizers[cfg.optimizer_name](self.model, self.loss, **cfg.optimizer_args)
+
+        self.start_epoch = 1
+        self.epochs = cfg.epochs
+        self.output_dir = cfg.output_dir
+        self.log_dir = os.path.join(self.output_dir, "log")
+        self.log_file = os.path.join(self.output_dir, "log.txt")
+        self.logger = SummaryWriter(self.log_dir)
+        os.makedirs(self.log_dir, exist_ok=True)
+
+        self.best_miou = 0
+        self.global_step = 0
+        if self.cfg.num_device > 1:
+            self.model = torch.nn.DataParallel(self.model)
+        self.load_checkpoint()
+
+    def train(self):
+        self.adjust_lr(self.cfg.lr)
+        for epoch in range(self.start_epoch, self.epochs + 1):
+            if epoch in self.cfg.milestones:
+                self.adjust_lr(self.cfg.milestones[epoch])
+            self.adjust_lr_manual()
+
+            self.train_epoch(epoch)
+
+            val_miou = self.val_epoch() if self.cfg.do_val else -1
+            self.save_checkpoint(epoch, val_miou, val_miou >= self.best_miou)
+            print()
+
+    def train_epoch(self, epoch):
+        self.model.train()
+
+        t, c = Timer(), Counter()
+        t.start()
+        for step, (img, mask) in enumerate(self.train_loader):
+            img, mask = img.permute(0, 3, 1, 2).to(self.device), mask.unsqueeze_(1).to(self.device)
+            reader_time = t.elapsed_time()
+
+            out, loss, boundary_bce_loss, boundary_dice_loss = self.train_step(img, mask)
+
+            pred = torch.argmax(out, 1)
+            acc = torch.eq(pred, mask).float().mean()
+            miou = mean_iou(pred, mask, self.num_classes)
+
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+
+            loss, boundary_bce_loss, boundary_dice_loss = float(loss), float(boundary_bce_loss), float(boundary_dice_loss)
+            acc, miou = float(acc) * 100, float(miou) * 100
+            batch_time = t.elapsed_time()
+            c.append(loss=loss, acc=acc, miou=miou, reader_time=reader_time, batch_time=batch_time)
+            eta = calculate_eta(len(self.train_loader) - step, c.batch_time)
+            self.log(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] "
+                     f"[epoch={epoch}/{self.epochs}] "
+                     f"step={step + 1}/{len(self.train_loader)} "
+                     f"lr={self.optimizer.param_groups[0]['lr']:.4f} "
+                     f"loss={loss:.4f}/{c.loss:.4f} "
+                     f"boundary_bce_loss={boundary_bce_loss:.4f}/{c.boundary_bce_loss:.4f} "
+                     f"boundary_dice_loss={boundary_dice_loss:.4f}/{c.boundary_dice_loss:.4f} "
+                     f"acc={acc:.2f}/{c.acc:.2f} "
+                     f"miou={miou:.2f}/{c.miou:.2f} "
+                     f"batch_time={c.batch_time:.4f}+{c.reader_time:.4f} "
+                     f"| ETA {eta}",
+                     end="\r",
+                     to_file=step % 10 == 0)
+
+            self.logger.add_scalar("train/loss", float(loss), global_step=self.global_step)
+            self.logger.add_scalar("train/acc", acc, global_step=self.global_step)
+            self.logger.add_scalar("train/miou", miou, global_step=self.global_step)
+            self.global_step += 1
+            self.logger.flush()
+
+            t.restart()
+        print()
+
+    def train_step(self, im, lb):
+        use_boundary_2 = self.cfg.model_args.use_boundary_2
+        use_boundary_4 = self.cfg.model_args.use_boundary_4
+        use_boundary_8 = self.cfg.model_args.use_boundary_8
+
+        out, out16, out32, detail2, detail4, detail8 = None, None, None, None, None, None
+
+        if use_boundary_2 and use_boundary_4 and use_boundary_8:
+            out, out16, out32, detail2, detail4, detail8 = self.model(im)
+
+        if (not use_boundary_2) and use_boundary_4 and use_boundary_8:
+            out, out16, out32, detail4, detail8 = self.model(im)
+
+        if (not use_boundary_2) and (not use_boundary_4) and use_boundary_8:
+            out, out16, out32, detail8 = self.model(im)
+
+        if (not use_boundary_2) and (not use_boundary_4) and (not use_boundary_8):
+            out, out16, out32 = self.model(im)
+
+        loss, boundary_bce_loss, boundary_dice_loss = self.loss(lb, out, out16, out32, detail2, detail4, detail8)
+        return out, loss, boundary_bce_loss, boundary_dice_loss
+
+    @torch.no_grad()
+    def val_epoch(self):
+        self.model.eval()
+
+        c = Counter()
+        for step, (img, mask) in enumerate(self.val_loader):
+            img, mask = img.permute(0, 3, 1, 2).to(self.device), mask.unsqueeze_(1).to(self.device)
+
+            pred = self.model(img)
+
+            pred = torch.argmax(pred, 1)
+            acc = torch.eq(pred, mask).float().mean()
+            miou = mean_iou(pred, mask, self.num_classes)
+
+            c.append(acc=float(acc) * 100, miou=float(miou) * 100)
+            print(f"[VAL] {step + 1}/{len(self.val_loader)}", end="\r", flush=True)
+
+        self.log(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] "
+                 f"[VAL] "
+                 f"acc={c.acc:.2f} "
+                 f"miou={c.miou:.2f}")
+
+        self.logger.add_scalar("val/acc", c.acc, global_step=self.global_step)
+        self.logger.add_scalar("val/miou", c.miou, global_step=self.global_step)
+        self.logger.flush()
+
+        return c.miou
+
+    def adjust_lr(self, value):
+        for params in self.optimizer.param_groups:
+            params['lr'] = value / 10 if params["name"] == "backbone" else value
+
+    def adjust_lr_manual(self):
+        lr_file = os.path.join(self.cfg.output_dir, "lr.txt")
+        if not os.path.exists(lr_file):
+            return
+
+        line = open(lr_file, "r").read().strip()
+        if line.startswith("#"):
+            return
+
+        self.adjust_lr(float(line))
+        open(lr_file, "w").write(f"#{line}")
+
+    def save_checkpoint(self, epoch, miou=None, is_best=False):
+        state = {
+            "epoch": epoch,
+            "is_best": is_best,
+            "miou": miou,
+            "best_miou": self.best_miou,
+            "global_step": self.global_step,
+            "model": self.model.state_dict(),
+            "loss": self.loss.state_dict(),
+            "optimizer": self.optimizer.state_dict()
+        }
+
+        os.makedirs(self.output_dir, exist_ok=True)
+        torch.save(state, os.path.join(self.output_dir, "latest.pth"))
+        if is_best:
+            self.best_miou = miou
+            torch.save(state, os.path.join(self.output_dir, f"{miou:.4f}_{epoch:04}_model.pth"))
+
+    def load_checkpoint(self):
+        file = os.path.join(self.output_dir, "latest.pth")
+        if not os.path.exists(file):
+            return
+
+        state = torch.load(file)
+        self.start_epoch = state["epoch"] + 1
+        self.model.load_state_dict(state["model"])
+        self.loss.load_state_dict(state["loss"])
+        self.optimizer.load_state_dict(state["optimizer"])
+        self.best_miou = state["best_miou"]
+        self.global_step = state["global_step"]
+
+    def log(self, msg, end='\n', to_file=True):
+        print(msg, end=end, flush=True)
+        if to_file:
+            print(msg, end='\n', flush=True, file=open(self.log_file, "a+"))
