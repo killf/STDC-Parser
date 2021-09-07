@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
 import datetime
@@ -16,7 +17,7 @@ class Solver:
         self.device = torch.device(cfg.device)
         self.output_dir = cfg.output_dir
 
-        train_transform = Compose([ToTensor()])
+        train_transform = Compose([ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5), RandomScale((0.75, 1.25)), RandomCrop(448), ToTensor(), Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
         train_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="train.txt", image_size=cfg.image_size, transform=train_transform)
         self.train_loader = DataLoader(train_data, cfg.batch_size, True, num_workers=4)
 
@@ -64,7 +65,7 @@ class Solver:
         t, c = Timer(), Counter()
         t.start()
         for step, (img, mask) in enumerate(self.train_loader):
-            img, mask = img.permute(0, 3, 1, 2).to(self.device), mask.to(self.device)
+            img, mask = img.to(self.device), mask.to(self.device)
             reader_time = t.elapsed_time()
 
             out, loss, boundary_bce_loss, boundary_dice_loss = self.train_step(img, mask)
@@ -133,7 +134,7 @@ class Solver:
 
         c = Counter()
         for step, (img, mask) in enumerate(self.val_loader):
-            img, mask = img.permute(0, 3, 1, 2).to(self.device), mask.to(self.device)
+            img, mask = img.to(self.device), mask.to(self.device)
 
             pred = self.model(img)[0]
 

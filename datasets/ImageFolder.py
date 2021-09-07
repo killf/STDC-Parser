@@ -1,5 +1,6 @@
+import PIL.Image
 from torch.utils.data import Dataset
-import cv2
+from PIL import Image
 import os
 
 
@@ -20,12 +21,13 @@ class ImageFolder(Dataset):
     def __getitem__(self, i):
         img_file, mask_file = self.files[i]
 
-        img = cv2.imread(os.path.join(self.root, img_file))
-        mask = cv2.imread(os.path.join(self.root, mask_file), cv2.IMREAD_GRAYSCALE)
+        img = Image.open(os.path.join(self.root, img_file))
+        if self.image_size is not None and img.size != self.image_size:
+            img = img.resize(self.image_size)
 
-        if self.image_size is not None:
-            img = cv2.resize(img, self.image_size)
-            mask = cv2.resize(mask, self.image_size, interpolation=cv2.INTER_NEAREST)
+        mask = Image.open(os.path.join(self.root, mask_file)).convert("I")
+        if self.image_size is not None and mask.size != self.image_size:
+            mask = mask.resize(self.image_size, resample=PIL.Image.NEAREST)
 
         if self.transform is not None:
             img, mask = self.transform(img, mask)
@@ -37,25 +39,25 @@ class ImageFolder(Dataset):
         return len(self.label_names)
 
 
-def test():
-    import sys
-    sys.path.append("D:\\dlab\\face_parsing")
-
-    import numpy as np
-    from utils import label_colormap
-
-    colormap = label_colormap(19)
-    alpha = 0.8
-
-    dataset = ImageFolder("D:\\face\\parsing\\dataset\\CelebAMask-HQ_processed")
-    for i, (img, mask) in enumerate(dataset):
-        res = colormap[mask]
-        dst = (1 - alpha) * img.astype(float) + alpha * res.astype(float)
-        img = np.clip(dst.round(), 0, 255).astype(np.uint8)
-
-        cv2.imwrite(f"output/{i:04}.jpg", img)
-        if i > 100:
-            break
+# def test():
+#     import sys
+#     sys.path.append("D:\\dlab\\face_parsing")
+#
+#     import numpy as np
+#     from utils import label_colormap
+#
+#     colormap = label_colormap(19)
+#     alpha = 0.8
+#
+#     dataset = ImageFolder("D:\\face\\parsing\\dataset\\CelebAMask-HQ_processed")
+#     for i, (img, mask) in enumerate(dataset):
+#         res = colormap[mask]
+#         dst = (1 - alpha) * img.astype(float) + alpha * res.astype(float)
+#         img = np.clip(dst.round(), 0, 255).astype(np.uint8)
+#
+#         # cv2.imwrite(f"output/{i:04}.jpg", img)
+#         if i > 100:
+#             break
 
 
 if __name__ == '__main__':
