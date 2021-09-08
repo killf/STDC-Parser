@@ -1,5 +1,7 @@
 import torch
 
+from utils.transforms import *
+
 
 class Config:
     def __init__(self, task_id=1):
@@ -14,6 +16,14 @@ class Config:
         self.image_size = 512
         self.crop_size = (448, 448)
         self.do_val = True
+
+        self.train_transform = Compose([ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
+                                        RandomScale((0.75, 1.25)),
+                                        RandomRotation(),
+                                        RandomCrop(self.crop_size),
+                                        ToTensor(),
+                                        Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
+        self.val_transform = Compose([ToTensor(), Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
 
         self.model_name = "BiSeNet"
         self.model_args = Dict(
@@ -40,7 +50,7 @@ class Config:
         self.lr = 0.01
         self.batch_size = 8
         self.milestones = Dict()
-        self.epochs = 200
+        self.epochs = 30
 
     def build(self, steps=None):
         if "lr0" not in self.optimizer_args:

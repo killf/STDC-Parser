@@ -21,7 +21,7 @@ class ImageFolder(Dataset):
     def __getitem__(self, i):
         img_file, mask_file = self.files[i]
 
-        img = Image.open(os.path.join(self.root, img_file))
+        img = Image.open(os.path.join(self.root, img_file)).convert("RGB")
         if self.image_size is not None and img.size != self.image_size:
             img = img.resize(self.image_size)
 

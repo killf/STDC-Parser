@@ -17,12 +17,10 @@ class Solver:
         self.device = torch.device(cfg.device)
         self.output_dir = cfg.output_dir
 
-        train_transform = Compose([ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5), RandomScale((0.75, 1.25)), RandomCrop(cfg.crop_size), ToTensor(), Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
-        train_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="train.txt", image_size=cfg.image_size, transform=train_transform)
+        train_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="train.txt", image_size=cfg.image_size, transform=cfg.train_transform)
         self.train_loader = DataLoader(train_data, cfg.batch_size, True, num_workers=4)
 
-        val_transform = Compose([ToTensor()])
-        val_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="val.txt", image_size=cfg.image_size, transform=val_transform)
+        val_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="val.txt", image_size=cfg.image_size, transform=cfg.val_transform)
         self.val_loader = DataLoader(val_data, cfg.batch_size, False)
 
         self.cfg = cfg.build(len(self.train_loader))
