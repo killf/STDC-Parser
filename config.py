@@ -1,4 +1,5 @@
 import torch
+from torchvision import transforms
 
 from utils.transforms import *
 
@@ -11,9 +12,11 @@ class Config:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.num_device = torch.cuda.device_count()
 
+        self.num_classes = 19
         self.dataset = "ImageFolder"
         self.data_dir = "/data/face/parsing/dataset/CelebAMask-HQ_processed"
-        self.image_size = 512
+        self.sample_dir = "/data/face/parsing/dataset/testset_210720_aligned"
+        self.image_size = (512, 512)
         self.crop_size = (448, 448)
         self.do_val = True
 
@@ -24,6 +27,7 @@ class Config:
                                         ToTensor(),
                                         Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
         self.val_transform = Compose([ToTensor(), Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
+        self.test_transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))])
 
         self.model_name = "BiSeNet"
         self.model_args = Dict(
@@ -52,7 +56,7 @@ class Config:
         self.milestones = Dict()
         self.epochs = 30
 
-    def build(self, steps=None):
+    def build(self, steps=None, num_classes=None):
         if "lr0" not in self.optimizer_args:
             self.optimizer_args["lr0"] = self.lr
 
@@ -61,6 +65,9 @@ class Config:
 
         if "warmup_steps" not in self.optimizer_args and steps is not None:
             self.optimizer_args["warmup_steps"] = steps
+
+        if num_classes is not None:
+            self.num_classes = num_classes
 
         return self
 

@@ -23,8 +23,7 @@ class Solver:
         val_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="val.txt", image_size=cfg.image_size, transform=cfg.val_transform)
         self.val_loader = DataLoader(val_data, cfg.batch_size, False)
 
-        self.cfg = cfg.build(len(self.train_loader))
-        self.num_classes = train_data.num_classes
+        self.cfg = cfg.build(len(self.train_loader), train_data.num_classes)
         self.model = MODELS[cfg.model_name](n_classes=train_data.num_classes, **cfg.model_args).to(self.device)
 
         self.loss = LOSSES[cfg.loss_name](cfg, **cfg.loss_args).to(self.device)
@@ -55,6 +54,8 @@ class Solver:
 
             val_miou = self.val_epoch() if self.cfg.do_val else -1
             self.save_checkpoint(epoch, val_miou, val_miou >= self.best_miou)
+
+            self.sample(epoch=epoch)
             print()
 
     def train_epoch(self, epoch):
@@ -70,7 +71,7 @@ class Solver:
 
             pred = torch.argmax(out, 1)
             acc = torch.eq(pred, mask).float().mean()
-            miou = mean_iou(pred, mask, self.num_classes)
+            miou = mean_iou(pred, mask, self.cfg.num_classes)
 
             self.optimizer.zero_grad()
             loss.backward()
@@ -138,7 +139,7 @@ class Solver:
 
             pred = torch.argmax(pred, 1)
             acc = torch.eq(pred, mask).float().mean()
-            miou = mean_iou(pred, mask, self.num_classes)
+            miou = mean_iou(pred, mask, self.cfg.num_classes)
 
             c.append(acc=float(acc) * 100, miou=float(miou) * 100)
             print(f"[VAL] {step + 1}/{len(self.val_loader)}", end="\r", flush=True)
@@ -153,6 +154,31 @@ class Solver:
         self.logger.flush()
 
         return c.miou
+
+    @torch.no_grad()
+    def sample(self, epoch=None, sample_dir=None, result_folder=None):
+        if sample_dir is None:
+            sample_dir = self.cfg.sample_dir
+        if sample_dir is None or not os.path.exists(sample_dir):
+            return
+
+        if result_folder is None:
+            result_folder = os.path.join(self.output_dir, "sample", f"{epoch:04}")
+        os.makedirs(result_folder, exist_ok=True)
+
+        self.model.eval()
+        for step, file_name in enumerate(os.listdir(sample_dir)):
+            image = Image.open(os.path.join(sample_dir, file_name)).resize(self.cfg.image_size)
+            img = self.cfg.test_transform(image)
+            img = torch.unsqueeze(img, 0)
+            img = img.cuda()
+            out = self.model(img)[0]
+            parsing = out.squeeze(0).cpu().numpy().argmax(0)
+
+            vis_parsing_maps(image, parsing, stride=1, save_im=True, save_path=os.path.join(result_folder, file_name))
+
+            print(f"[Sample] {step + 1}/{len(self.val_loader)}", end="\r", flush=True)
+        print(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] [Sample] {os.path.realpath(result_folder)}")
 
     def adjust_lr(self, value):
         self.optimizer.adjust_lr(value)

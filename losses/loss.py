@@ -1,6 +1,7 @@
 from torch import nn
 
 from .OhemCELoss import OhemCELoss
+from .WeightedOhemCELoss import WeightedOhemCELoss
 from .detail_loss import DetailAggregateLoss
 
 
