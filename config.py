@@ -14,13 +14,14 @@ class Config:
 
         self.num_classes = 19
         self.dataset = "ImageFolder"
-        self.data_dir = "/data/face/parsing/dataset/CelebAMask-HQ_processed"
+        self.data_dir = "/data/face/parsing/dataset/CelebAMask-HQ_processed3"
         self.sample_dir = "/data/face/parsing/dataset/testset_210720_aligned"
         self.image_size = (512, 512)
         self.crop_size = (448, 448)
         self.do_val = True
 
-        self.train_transform = Compose([ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
+        self.train_transform = Compose([RandomHorizontalFlip(),
+                                        ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5),
                                         RandomScale((0.75, 1.25)),
                                         RandomRotation(),
                                         RandomCrop(self.crop_size),
@@ -31,8 +32,8 @@ class Config:
 
         self.model_name = "BiSeNet"
         self.model_args = Dict(
-            backbone="STDCNet813",
-            pretrain_model="snapshot/STDCNet813M_73.91.tar",
+            backbone="STDCNet1446",
+            pretrain_model="snapshot/STDCNet1446_76.47.tar",
             use_boundary_2=False,
             use_boundary_4=False,
             use_boundary_8=True,
@@ -52,9 +53,9 @@ class Config:
         )
 
         self.lr = 0.01
-        self.batch_size = 8
+        self.batch_size = 64
         self.milestones = Dict()
-        self.epochs = 30
+        self.epochs = 40
 
     def build(self, steps=None, num_classes=None):
         if "lr0" not in self.optimizer_args:

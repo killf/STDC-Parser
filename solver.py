@@ -18,7 +18,7 @@ class Solver:
         self.output_dir = cfg.output_dir
 
         train_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="train.txt", image_size=cfg.image_size, transform=cfg.train_transform)
-        self.train_loader = DataLoader(train_data, cfg.batch_size, True, num_workers=4)
+        self.train_loader = DataLoader(train_data, cfg.batch_size, True, num_workers=8)
 
         val_data = DATASETS[cfg.dataset](cfg.data_dir, file_list="val.txt", image_size=cfg.image_size, transform=cfg.val_transform)
         self.val_loader = DataLoader(val_data, cfg.batch_size, False)
@@ -225,6 +225,8 @@ class Solver:
         self.optimizer.load_state_dict(state["optimizer"])
         self.best_miou = state["best_miou"]
         self.global_step = state["global_step"]
+
+        print(f"load checkpoint {file}")
 
     def log(self, msg, end='\n', to_file=True):
         print(msg, end=end, flush=True)
