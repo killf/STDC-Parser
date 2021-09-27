@@ -12,7 +12,7 @@ class Config:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.num_device = torch.cuda.device_count()
 
-        self.num_classes = 19
+        self.num_classes = 20
         self.dataset = "ImageFolder"
         self.data_dir = "/data/face/parsing/dataset/CelebAMask-HQ_processed3"
         self.sample_dir = "/data/face/parsing/dataset/testset_210720_aligned"

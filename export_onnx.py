@@ -65,8 +65,8 @@ def test(image_folder, result_folder, onnx_file="STDC_face_parsing.onnx"):
 
 
 if __name__ == '__main__':
-    cfg = Config()
+    # cfg = Config()
 
-    solver = Solver(cfg)
+    # solver = Solver(cfg)
     # export_onnx("STDC_face_parsing.onnx", solver.model)
     test("/data/face/parsing/dataset/testset_210720_aligned", "/data/STDC_onnx_result_512")
